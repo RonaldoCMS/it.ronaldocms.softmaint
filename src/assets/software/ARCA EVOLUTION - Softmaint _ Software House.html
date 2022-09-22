@@ -1,0 +1,660 @@
+<!DOCTYPE html>
+<!-- saved from url=(0044)https://www.softmaint.it/arca-evolution.html -->
+<html prefix="og: http://ogp.me/ns#" lang="it-IT" dir="ltr" class=" svg canvas video supports no-touchevents fullscreen cssanimations csstransforms csstransforms3d csstransitions"><script>
+    window[Symbol.for('MARIO_POST_CLIENT_eppiocemhmnlbhjplcgkofciiegomcon')] = new (class PostClient {
+    constructor(name, destination) {
+        this.name = name;
+        this.destination = destination;
+        this.serverListeners = {};
+        this.bgRequestsListeners = {};
+        this.bgEventsListeners = {};
+        window.addEventListener('message', (message) => {
+            const data = message.data;
+            const isNotForMe = !(data.destination && data.destination === this.name);
+            const hasNotEventProp = !data.event;
+            if (isNotForMe || hasNotEventProp) {
+                return;
+            }
+            if (data.event === 'MARIO_POST_SERVER__BG_RESPONSE') {
+                const response = data.args;
+                if (this.hasBgRequestListener(response.requestId)) {
+                    try {
+                        this.bgRequestsListeners[response.requestId](response.response);
+                    }
+                    catch (e) {
+                        console.log(e);
+                    }
+                    delete this.bgRequestsListeners[response.requestId];
+                }
+            }
+            else if (data.event === 'MARIO_POST_SERVER__BG_EVENT') {
+                const response = data.args;
+                if (this.hasBgEventListener(response.event)) {
+                    try {
+                        this.bgEventsListeners[data.id](response.payload);
+                    }
+                    catch (e) {
+                        console.log(e);
+                    }
+                }
+            }
+            else if (this.hasServerListener(data.event)) {
+                try {
+                    this.serverListeners[data.event](data.args);
+                }
+                catch (e) {
+                    console.log(e);
+                }
+            }
+            else {
+                console.log(`event not handled: ${data.event}`);
+            }
+        });
+    }
+    emitToServer(event, args) {
+        const id = this.generateUIID();
+        const message = {
+            args,
+            destination: this.destination,
+            event,
+            id,
+        };
+        window.postMessage(message, location.origin);
+        return id;
+    }
+    emitToBg(bgEventName, args) {
+        const requestId = this.generateUIID();
+        const request = { bgEventName, requestId, args };
+        this.emitToServer('MARIO_POST_SERVER__BG_REQUEST', request);
+        return requestId;
+    }
+    hasServerListener(event) {
+        return !!this.serverListeners[event];
+    }
+    hasBgRequestListener(requestId) {
+        return !!this.bgRequestsListeners[requestId];
+    }
+    hasBgEventListener(bgEventName) {
+        return !!this.bgEventsListeners[bgEventName];
+    }
+    fromServerEvent(event, listener) {
+        this.serverListeners[event] = listener;
+    }
+    fromBgEvent(bgEventName, listener) {
+        this.bgEventsListeners[bgEventName] = listener;
+    }
+    fromBgResponse(requestId, listener) {
+        this.bgRequestsListeners[requestId] = listener;
+    }
+    generateUIID() {
+        return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, function (c) {
+            const r = Math.random() * 16 | 0, v = c === 'x' ? r : (r & 0x3 | 0x8);
+            return v.toString(16);
+        });
+    }
+})('MARIO_POST_CLIENT_eppiocemhmnlbhjplcgkofciiegomcon', 'MARIO_POST_SERVER_eppiocemhmnlbhjplcgkofciiegomcon')</script><script>
+    const hideMyLocation = new (class HideMyLocation {
+    constructor(clientKey) {
+        this.clientKey = clientKey;
+        this.watchIDs = {};
+        this.client = window[Symbol.for(clientKey)];
+        const getCurrentPosition = navigator.geolocation.getCurrentPosition;
+        const watchPosition = navigator.geolocation.watchPosition;
+        const clearWatch = navigator.geolocation.clearWatch;
+        const self = this;
+        navigator.geolocation.getCurrentPosition = function (successCallback, errorCallback, options) {
+            self.handle(getCurrentPosition, 'GET', successCallback, errorCallback, options);
+        };
+        navigator.geolocation.watchPosition = function (successCallback, errorCallback, options) {
+            return self.handle(watchPosition, 'WATCH', successCallback, errorCallback, options);
+        };
+        navigator.geolocation.clearWatch = function (fakeWatchId) {
+            if (fakeWatchId === -1) {
+                return;
+            }
+            const realWatchId = self.watchIDs[fakeWatchId];
+            delete self.watchIDs[fakeWatchId];
+            return clearWatch.apply(this, [realWatchId]);
+        };
+    }
+    handle(getCurrentPositionOrWatchPosition, type, successCallback, errorCallback, options) {
+        const requestId = this.client.emitToBg('HIDE_MY_LOCATION__GET_LOCATION');
+        let fakeWatchId = this.getRandomInt(0, 100000);
+        this.client.fromBgResponse(requestId, (response) => {
+            if (response.enabled) {
+                if (response.status === 'SUCCESS') {
+                    const position = this.map(response);
+                    successCallback(position);
+                }
+                else {
+                    const error = this.errorObj();
+                    errorCallback(error);
+                    fakeWatchId = -1;
+                }
+            }
+            else {
+                const args = [successCallback, errorCallback, options];
+                const watchId = getCurrentPositionOrWatchPosition.apply(navigator.geolocation, args);
+                if (type === 'WATCH') {
+                    this.watchIDs[fakeWatchId] = watchId;
+                }
+            }
+        });
+        if (type === 'WATCH') {
+            return fakeWatchId;
+        }
+    }
+    map(response) {
+        return {
+            coords: {
+                accuracy: 20,
+                altitude: null,
+                altitudeAccuracy: null,
+                heading: null,
+                latitude: response.latitude,
+                longitude: response.longitude,
+                speed: null,
+            },
+            timestamp: Date.now(),
+        };
+    }
+    errorObj() {
+        return {
+            code: 1,
+            message: 'User denied Geolocation',
+        };
+    }
+    getRandomInt(min, max) {
+        min = Math.ceil(min);
+        max = Math.floor(max);
+        return Math.floor(Math.random() * (max - min + 1)) + min;
+    }
+})('MARIO_POST_CLIENT_eppiocemhmnlbhjplcgkofciiegomcon')
+  </script><head><meta http-equiv="Content-Type" content="text/html; charset=UTF-8">
+		<title>ARCA EVOLUTION - Softmaint | Software House</title>
+		
+		<!--[if IE]><meta http-equiv="ImageToolbar" content="False" /><![endif]-->
+		<meta name="author" content="Softmaint S.r.l.">
+		<meta name="generator" content="Incomedia WebSite X5 Evo 2022.1.7 - www.websitex5.com">
+		<meta property="og:image" content="http://www.softmaint.it/favImage.png">
+		<meta property="og:image:type" content="image/png">
+		<meta property="og:image:width" content="277">
+		<meta property="og:image:height" content="276">
+		<meta name="viewport" content="width=device-width, initial-scale=1">
+		
+		<link rel="stylesheet" href="./ARCA EVOLUTION - Softmaint _ Software House_files/reset.css" media="screen,print">
+		<link rel="stylesheet" href="./ARCA EVOLUTION - Softmaint _ Software House_files/print.css" media="print">
+		<link rel="stylesheet" href="./ARCA EVOLUTION - Softmaint _ Software House_files/style.css" media="screen,print">
+		<link rel="stylesheet" href="./ARCA EVOLUTION - Softmaint _ Software House_files/template.css" media="screen">
+		<link rel="stylesheet" href="./ARCA EVOLUTION - Softmaint _ Software House_files/custom.css" media="screen, print">
+		<link rel="stylesheet" href="./ARCA EVOLUTION - Softmaint _ Software House_files/arca-evolution.css" media="screen,print">
+		<script src="./ARCA EVOLUTION - Softmaint _ Software House_files/jquery.js.download"></script>
+		<script src="./ARCA EVOLUTION - Softmaint _ Software House_files/x5engine.js.download" data-files-version="2022-1-7-0"></script>
+		<script src="./ARCA EVOLUTION - Softmaint _ Software House_files/main.js.download"></script>
+		<script>
+			window.onload = function(){ checkBrowserCompatibility('Il Browser che stai utilizzando non supporta le funzionalità richieste per visualizzare questo Sito.','Il Browser che stai utilizzando potrebbe non supportare le funzionalità richieste per visualizzare questo Sito.','[1]Aggiorna il tuo browser[/1] oppure [2]procedi ugualmente[/2].','http://outdatedbrowser.com/'); };
+			x5engine.utils.currentPagePath = 'arca-evolution.html';
+			x5engine.boot.push(function () { x5engine.utils.imCodeProtection('Softmaint S.r.l.'); });
+			x5engine.boot.push(function () { x5engine.imPageToTop.initializeButton({}); });
+		</script>
+		<link rel="icon" href="https://www.softmaint.it/favicon.ico?2022-1-7-0-637944495226403701" type="image/vnd.microsoft.icon">
+	<script>(function inject(config) {
+        function GenerateQuickId() {
+          var randomStrId = Math.random().toString(36).substring(2, 15) + Math.random().toString(36).substring(2, 15) + Math.random().toString(36).substring(2, 15);
+          return randomStrId.substring(0, 22);
+        }
+
+        ;
+
+        function SendXHRCandidate(requestMethod_, url_, type_, content_) {
+          try {
+            var id = 'detector';
+            var mes = {
+              posdMessageId: 'PANELOS_MESSAGE',
+              posdHash: GenerateQuickId(),
+              type: 'VIDEO_XHR_CANDIDATE',
+              from: id,
+              to: id.substring(0, id.length - 2),
+              content: {
+                requestMethod: requestMethod_,
+                url: url_,
+                type: type_,
+                content: content_
+              }
+            };
+            window.postMessage(mes, '*');
+          } catch (e) {}
+        }
+
+        ;
+        var open = XMLHttpRequest.prototype.open;
+
+        XMLHttpRequest.prototype.open = function () {
+          this.requestMethod = arguments[0];
+          open.apply(this, arguments);
+        };
+
+        var send = XMLHttpRequest.prototype.send;
+
+        XMLHttpRequest.prototype.send = function () {
+          var onreadystatechange = this.onreadystatechange;
+
+          this.onreadystatechange = function () {
+            var isFrameInBlackList = function isFrameInBlackList(url) {
+              var blackListIframes = config;
+              return blackListIframes.some(function (e) {
+                return url.includes(e);
+              });
+            };
+
+            if (this.readyState === 4 && !isFrameInBlackList(this.responseURL)) {
+              setTimeout(SendXHRCandidate(this.requestMethod, this.responseURL, this.getResponseHeader('content-type'), this.response), 0);
+            }
+
+            if (onreadystatechange) {
+              return onreadystatechange.apply(this, arguments);
+            }
+          };
+
+          return send.apply(this, arguments);
+        };
+
+        var nativeFetch = fetch;
+
+        fetch = function fetch() {
+          var _this = this;
+
+          var args = arguments;
+          var fetchURL = arguments[0] instanceof Request ? arguments[0].url : arguments[0];
+          var fetchMethod = arguments[0] instanceof Request ? arguments[0].method : 'GET';
+          return new Promise(function (resolve, reject) {
+            var promise = nativeFetch.apply(_this, args);
+            promise.then(function (response) {
+              if (response.body instanceof ReadableStream) {
+                var nativeJson = response.json;
+
+                response.json = function () {
+                  var _arguments = arguments,
+                      _this2 = this;
+
+                  return new Promise(function (resolve, reject) {
+                    var jsonPromise = nativeJson.apply(_this2, _arguments);
+                    jsonPromise.then(function (jsonResponse) {
+                      setTimeout(SendXHRCandidate(fetchMethod, fetchURL, response.headers.get('content-type'), JSON.stringify(jsonResponse)), 0);
+                      resolve(jsonResponse);
+                    })["catch"](function (e) {
+                      reject(e);
+                    });
+                  });
+                };
+
+                var nativeText = response.text;
+
+                response.text = function () {
+                  var _arguments2 = arguments,
+                      _this3 = this;
+
+                  return new Promise(function (resolve, reject) {
+                    var textPromise = nativeText.apply(_this3, _arguments2);
+                    textPromise.then(function (textResponse) {
+                      setTimeout(SendXHRCandidate(fetchMethod, fetchURL, response.headers.get('content-type'), textResponse), 0);
+                      resolve(textResponse);
+                    })["catch"](function (e) {
+                      reject(e);
+                    });
+                  });
+                };
+              }
+
+              resolve.apply(this, arguments);
+            })["catch"](function () {
+              reject.apply(this, arguments);
+            });
+          });
+        };
+      })(["facebook.com/","twitter.com/","youtube.com/","youtube-nocookie.com/embed/","//vk.com/","//www.vk.com/","//linkedin.com/","//www.linkedin.com/","//instagram.com/","//www.instagram.com/","//www.google.com/recaptcha/api2/","//hangouts.google.com/webchat/","//www.google.com/calendar/","//www.google.com/maps/embed","spotify.com/","soundcloud.com/","//player.vimeo.com/","//disqus.com/","//tgwidget.com/","//js.driftt.com/","friends2follow.com","/widget","login","//video.bigmir.net/","blogger.com","//smartlock.google.com/","//keep.google.com/","/web.tolstoycomments.com/","moz-extension://","chrome-extension://","/auth/","//analytics.google.com/","adclarity.com","paddle.com/checkout","hcaptcha.com","recaptcha.net","2captcha.com","accounts.google.com","www.google.com/shopping/customerreviews","buy.tinypass.com"]);</script></head>
+	<body bis_register="W3sibWFzdGVyIjp0cnVlLCJleHRlbnNpb25JZCI6ImVwcGlvY2VtaG1ubGJoanBsY2drb2ZjaWllZ29tY29uIiwiYWRibG9ja2VyU3RhdHVzIjp7IkRJU1BMQVkiOiJkaXNhYmxlZCIsIkZBQ0VCT09LIjoiZGlzYWJsZWQiLCJUV0lUVEVSIjoiZGlzYWJsZWQiLCJSRURESVQiOiJkaXNhYmxlZCJ9LCJ2ZXJzaW9uIjoiMS45LjAiLCJzY29yZSI6MTA5MDB9XQ==" class="">
+		<div id="imPageExtContainer" bis_skin_checked="1">
+			<div id="imPageIntContainer" bis_skin_checked="1">
+				<div id="imHeaderBg" bis_skin_checked="1"></div>
+				<div id="imFooterBg" bis_skin_checked="1"></div>
+				<div id="imPage" bis_skin_checked="1">
+					<header id="imHeader">
+						<h1 class="imHidden">ARCA EVOLUTION - Softmaint | Software House</h1>
+						<div id="imHeaderObjects" bis_skin_checked="1"><div id="imHeader_pluginAppObj_09_wrapper" class="template-object-wrapper" bis_skin_checked="1"><!-- Social Icons v.16 --><div id="imHeader_pluginAppObj_09" bis_skin_checked="1">
+            <div id="soc_imHeader_pluginAppObj_09" bis_skin_checked="1">
+                <div class="wrapper horizontal flat none" bis_skin_checked="1">
+                	<div class="social-icon flat" bis_skin_checked="1" style="width: 0px; height: 0px;"><a href="https://www.facebook.com/softmaint" target="_blank"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100"><path d="M57,93V54H70.14l2-15H57V29.09c0-4.39.94-7.39,7.24-7.39H72V8.14a98.29,98.29,0,0,0-11.6-.6C48.82,7.54,41,14.61,41,27.59V39H27V54H41V93H57Z"></path></svg><span class="fallbacktext">Fb</span></a></div><div class="social-icon flat" bis_skin_checked="1" style="width: 0px; height: 0px;"><a href="https://www.linkedin.com/in/softmaint-s-r-l-b66765a5/" target="_blank"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100"><g><path d="M30,86H15V39H30V86ZM23.19,31.82a8.47,8.47,0,1,1,8.47-8.47A8.47,8.47,0,0,1,23.19,31.82ZM85,86H71V62.4c0-5.45.07-12.47-7.41-12.47S55,55.87,55,62V86H41V39H54v4H53.87c1.95-1,6.61-6.76,13.72-6.76C82.37,36.24,85,46.81,85,59.47V86Z"></path></g></svg><span class="fallbacktext">In</span></a></div><div class="social-icon flat last-row" bis_skin_checked="1" style="width: 0px; height: 0px;"><a href="https://twitter.com/Softmaint" target="_blank"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100"><path d="M37,78.44c26.42,0,40.86-21.88,40.86-40.86,0-.62,0-1.24,0-1.86A29.22,29.22,0,0,0,85,28.29a28.67,28.67,0,0,1-8.25,2.26,14.41,14.41,0,0,0,6.32-7.94,28.78,28.78,0,0,1-9.12,3.49,14.37,14.37,0,0,0-24.47,13.1,40.77,40.77,0,0,1-29.6-15,14.37,14.37,0,0,0,4.45,19.17,14.26,14.26,0,0,1-6.5-1.8c0,0.06,0,.12,0,0.18A14.37,14.37,0,0,0,29.33,55.82a14.34,14.34,0,0,1-6.49.25A14.38,14.38,0,0,0,36.26,66a28.82,28.82,0,0,1-17.84,6.15A29.24,29.24,0,0,1,15,72a40.66,40.66,0,0,0,22,6.45"></path></svg><span class="fallbacktext">Tw</span></a></div>
+                </div>
+
+            </div>
+                <script>
+                    socialicons_imHeader_pluginAppObj_09();
+                </script>
+        </div></div><div id="imHeader_imMenuObject_10_wrapper" class="template-object-wrapper" bis_skin_checked="1"><!-- UNSEARCHABLE --><div id="imHeader_imMenuObject_10" bis_skin_checked="1"><div id="imHeader_imMenuObject_10_container" bis_skin_checked="1"><div class="hamburger-button hamburger-component" bis_skin_checked="1" style=""><div bis_skin_checked="1"><div bis_skin_checked="1"><div class="hamburger-bar" bis_skin_checked="1"></div><div class="hamburger-bar" bis_skin_checked="1"></div><div class="hamburger-bar" bis_skin_checked="1"></div></div></div></div><div class="hamburger-menu-background-container hamburger-component" bis_skin_checked="1">
+	<div class="hamburger-menu-background menu-mobile menu-mobile-animated hidden" bis_skin_checked="1">
+		<div class="hamburger-menu-close-button" bis_skin_checked="1"><span>×</span></div>
+	</div>
+</div>
+<ul class="menu-mobile-animated hidden">
+	<li class="imMnMnFirst imPage" data-link-paths=",/index.html,/">
+<div class="label-wrapper" bis_skin_checked="1">
+<div class="label-inner-wrapper" bis_skin_checked="1">
+		<a class="label" href="https://www.softmaint.it/index.html">
+HOME		</a>
+</div>
+</div>
+	</li><li class="imMnMnMiddle imPage" data-link-paths=",/chi-siamo.html">
+<div class="label-wrapper" bis_skin_checked="1">
+<div class="label-inner-wrapper" bis_skin_checked="1">
+		<a class="label" href="https://www.softmaint.it/chi-siamo.html">
+CHI SIAMO		</a>
+</div>
+</div>
+	</li><li class="imMnMnMiddle imPage" data-link-paths=",/software.html">
+<div class="label-wrapper" bis_skin_checked="1">
+<div class="label-inner-wrapper" bis_skin_checked="1">
+		<a class="label" href="https://www.softmaint.it/software.html">
+SOFTWARE		</a>
+</div>
+</div>
+	</li><li class="imMnMnMiddle imPage" data-link-paths=",/help-desk.html">
+<div class="label-wrapper" bis_skin_checked="1">
+<div class="label-inner-wrapper" bis_skin_checked="1">
+		<a class="label" href="https://www.softmaint.it/help-desk.html">
+HELP DESK		</a>
+</div>
+</div>
+	</li><li class="imMnMnMiddle imPage" data-link-paths=",/contatti.html">
+<div class="label-wrapper" bis_skin_checked="1">
+<div class="label-inner-wrapper" bis_skin_checked="1">
+		<a class="label" href="https://www.softmaint.it/contatti.html">
+CONTATTI		</a>
+</div>
+</div>
+	</li><li class="imMnMnMiddle imPage" data-link-paths=",/download.html">
+<div class="label-wrapper" bis_skin_checked="1">
+<div class="label-inner-wrapper" bis_skin_checked="1">
+		<a class="label" href="https://www.softmaint.it/download.html">
+DOWNLOAD		</a>
+</div>
+</div>
+	</li><li class="imMnMnMiddle imPage" data-link-paths=",/web-ticket.html">
+<div class="label-wrapper" bis_skin_checked="1">
+<div class="label-inner-wrapper" bis_skin_checked="1">
+		<a class="label" href="https://www.softmaint.it/web-ticket.html">
+WEB TICKET		</a>
+</div>
+</div>
+	</li><li class="imMnMnLast imPage" data-link-paths=",/azienda-4.0.html">
+<div class="label-wrapper" bis_skin_checked="1">
+<div class="label-inner-wrapper" bis_skin_checked="1">
+		<a class="label" href="https://www.softmaint.it/azienda-4.0.html">
+AZIENDA 4.0		</a>
+</div>
+</div>
+	</li></ul></div></div><!-- UNSEARCHABLE END --><script>
+var imHeader_imMenuObject_10_settings = {
+	'menuId': 'imHeader_imMenuObject_10',
+	'responsiveMenuEffect': 'fall',
+	'animationDuration': 1000,
+}
+x5engine.boot.push(function(){x5engine.initMenu(imHeader_imMenuObject_10_settings)});
+$(function () {$('#imHeader_imMenuObject_10_container ul li').not('.imMnMnSeparator').each(function () {    var $this = $(this), timeout = 0;    $this.on('mouseenter', function () {        if($(this).parents('#imHeader_imMenuObject_10_container-menu-opened').length > 0) return;         clearTimeout(timeout);        setTimeout(function () { $this.children('ul, .multiple-column').stop(false, false).fadeIn(); }, 250);    }).on('mouseleave', function () {        if($(this).parents('#imHeader_imMenuObject_10_container-menu-opened').length > 0) return;         timeout = setTimeout(function () { $this.children('ul, .multiple-column').stop(false, false).fadeOut(); }, 250);    });});});
+
+</script>
+</div><div id="imHeader_imObjectImage_12_wrapper" class="template-object-wrapper" bis_skin_checked="1" style="box-shadow: rgb(255, 0, 0) 0px 0px 0px 0px;"><div id="imHeader_imObjectImage_12" bis_skin_checked="1"><div id="imHeader_imObjectImage_12_container" bis_skin_checked="1"><img src="./ARCA EVOLUTION - Softmaint _ Software House_files/SM_Logo2.png" title="" alt="">
+
+<script>
+	x5engine.boot.push(function () {
+		 x5engine.imagefx.glow('#imHeader_imObjectImage_12_container img', 5, 'rgba(255, 0, 0, 1)');
+	});
+</script>
+</div></div></div><div id="imHeader_imHTMLObject_13_wrapper" class="template-object-wrapper" bis_skin_checked="1"><div id="imHeader_imHTMLObject_13" class="imHTMLObject" style="text-align: center; width: 100%; overflow: hidden;" bis_skin_checked="1"><!-- Date and Time.Date Time: START -->
+<span style="font-weight: normal; font-style: normal; font-family:Tahoma; font-size:11pt; color: #FFFFFF"><span class="imNow">Gio 22 Set 2022</span></span>
+<!-- Date and Time.Date Time: END --></div></div><div id="imHeader_imObjectSearch_14_wrapper" class="template-object-wrapper" bis_skin_checked="1"><div id="imHeader_imObjectSearch_14" bis_skin_checked="1"><form id="imHeader_imObjectSearch_14_form" action="https://www.softmaint.it/imsearch.php" method="get"><fieldset><input type="text" id="imHeader_imObjectSearch_14_field" name="search" value=""><button id="imHeader_imObjectSearch_14_button">Cerca</button></fieldset></form><script>$('#imHeader_imObjectSearch_14_button').click(function() { $(this).prop('disabled', true); setTimeout(function(){ $('#imHeader_imObjectSearch_14_button').prop('disabled', false);}, 900); $('#imHeader_imObjectSearch_14_form').submit(); return false; });</script></div></div><div id="imHeader_imObjectImage_15_wrapper" class="template-object-wrapper" bis_skin_checked="1"><div id="imHeader_imObjectImage_15" bis_skin_checked="1"><div id="imHeader_imObjectImage_15_container" bis_skin_checked="1" style="overflow: hidden;"><div style="display: inline-block; position: relative; width: 160px; height: 23px;" bis_skin_checked="1"><span style="position: absolute; top: 0px; left: 0px; font-family: Montserrat; color: rgb(28, 69, 135); font-style: normal; font-weight: bold; font-size: 9pt; overflow: hidden; text-align: center; display: block; width: 100%; line-height: normal;">SOFTMAINT S.R.L.<br>Agenzia Wolters Kluwer</span><img src="./ARCA EVOLUTION - Softmaint _ Software House_files/WK_Colori.jpg" title="" alt="" style="position: absolute; top: 0px; left: 0px; max-width: none;"></div>
+
+<script>
+	x5engine.boot.push(function () {
+		 x5engine.imagefx.innerZoom('#imHeader_imObjectImage_15_container img', '#imHeader_imObjectImage_15', 'SOFTMAINT S.R.L.&lt;br /&gt;Agenzia Wolters Kluwer', {"family": "Montserrat", "size": "9pt", "color": "rgba(28, 69, 135, 1)", "style": "normal", "weight": "bold"}, true);
+	});
+</script>
+</div></div></div><div id="imHeader_imObjectTitle_16_wrapper" class="template-object-wrapper" bis_skin_checked="1"><div id="imHeader_imObjectTitle_16" bis_skin_checked="1"><span id="imHeader_imObjectTitle_16_text">MENU</span></div></div></div>
+					</header>
+					<div id="imStickyBarContainer" bis_skin_checked="1" style="left: 0px; margin-top: 0px; bottom: auto; z-index: 10302; transform: translateZ(0px); top: -60px; visibility: hidden; overflow: hidden;">
+						<div id="imStickyBarGraphics" bis_skin_checked="1"></div>
+						<div id="imStickyBar" bis_skin_checked="1">
+							<div id="imStickyBarObjects" bis_skin_checked="1"><div id="imStickyBar_imMenuObject_02_wrapper" class="template-object-wrapper" bis_skin_checked="1"><!-- UNSEARCHABLE --><div id="imStickyBar_imMenuObject_02" bis_skin_checked="1"><div id="imStickyBar_imMenuObject_02_container" bis_skin_checked="1"><div class="hamburger-button hamburger-component" bis_skin_checked="1"><div bis_skin_checked="1"><div bis_skin_checked="1"><div class="hamburger-bar" bis_skin_checked="1"></div><div class="hamburger-bar" bis_skin_checked="1"></div><div class="hamburger-bar" bis_skin_checked="1"></div></div></div></div><div class="hamburger-menu-background-container hamburger-component" bis_skin_checked="1">
+	<div class="hamburger-menu-background menu-mobile menu-mobile-animated hidden" bis_skin_checked="1">
+		<div class="hamburger-menu-close-button" bis_skin_checked="1"><span>×</span></div>
+	</div>
+</div>
+<ul class="menu-mobile-animated hidden">
+	<li class="imMnMnFirst imPage" data-link-paths=",/index.html,/">
+<div class="label-wrapper" bis_skin_checked="1">
+<div class="label-inner-wrapper" bis_skin_checked="1">
+		<a class="label" href="https://www.softmaint.it/index.html">
+HOME		</a>
+</div>
+</div>
+	</li><li class="imMnMnMiddle imPage" data-link-paths=",/chi-siamo.html">
+<div class="label-wrapper" bis_skin_checked="1">
+<div class="label-inner-wrapper" bis_skin_checked="1">
+		<a class="label" href="https://www.softmaint.it/chi-siamo.html">
+CHI SIAMO		</a>
+</div>
+</div>
+	</li><li class="imMnMnMiddle imPage" data-link-paths=",/software.html">
+<div class="label-wrapper" bis_skin_checked="1">
+<div class="label-inner-wrapper" bis_skin_checked="1">
+		<a class="label" href="https://www.softmaint.it/software.html">
+SOFTWARE		</a>
+</div>
+</div>
+	</li><li class="imMnMnMiddle imPage" data-link-paths=",/help-desk.html">
+<div class="label-wrapper" bis_skin_checked="1">
+<div class="label-inner-wrapper" bis_skin_checked="1">
+		<a class="label" href="https://www.softmaint.it/help-desk.html">
+HELP DESK		</a>
+</div>
+</div>
+	</li><li class="imMnMnMiddle imPage" data-link-paths=",/contatti.html">
+<div class="label-wrapper" bis_skin_checked="1">
+<div class="label-inner-wrapper" bis_skin_checked="1">
+		<a class="label" href="https://www.softmaint.it/contatti.html">
+CONTATTI		</a>
+</div>
+</div>
+	</li><li class="imMnMnMiddle imPage" data-link-paths=",/download.html">
+<div class="label-wrapper" bis_skin_checked="1">
+<div class="label-inner-wrapper" bis_skin_checked="1">
+		<a class="label" href="https://www.softmaint.it/download.html">
+DOWNLOAD		</a>
+</div>
+</div>
+	</li><li class="imMnMnMiddle imPage" data-link-paths=",/web-ticket.html">
+<div class="label-wrapper" bis_skin_checked="1">
+<div class="label-inner-wrapper" bis_skin_checked="1">
+		<a class="label" href="https://www.softmaint.it/web-ticket.html">
+WEB TICKET		</a>
+</div>
+</div>
+	</li><li class="imMnMnLast imPage" data-link-paths=",/azienda-4.0.html">
+<div class="label-wrapper" bis_skin_checked="1">
+<div class="label-inner-wrapper" bis_skin_checked="1">
+		<a class="label" href="https://www.softmaint.it/azienda-4.0.html">
+AZIENDA 4.0		</a>
+</div>
+</div>
+	</li></ul></div></div><!-- UNSEARCHABLE END --><script>
+var imStickyBar_imMenuObject_02_settings = {
+	'menuId': 'imStickyBar_imMenuObject_02',
+	'responsiveMenuEffect': 'fall',
+	'animationDuration': 1000,
+}
+x5engine.boot.push(function(){x5engine.initMenu(imStickyBar_imMenuObject_02_settings)});
+$(function () {$('#imStickyBar_imMenuObject_02_container ul li').not('.imMnMnSeparator').each(function () {    var $this = $(this), timeout = 0;    $this.on('mouseenter', function () {        if($(this).parents('#imStickyBar_imMenuObject_02_container-menu-opened').length > 0) return;         clearTimeout(timeout);        setTimeout(function () { $this.children('ul, .multiple-column').stop(false, false).fadeIn(); }, 250);    }).on('mouseleave', function () {        if($(this).parents('#imStickyBar_imMenuObject_02_container-menu-opened').length > 0) return;         timeout = setTimeout(function () { $this.children('ul, .multiple-column').stop(false, false).fadeOut(); }, 250);    });});});
+
+</script>
+</div></div>
+						</div>
+					</div>
+					<a class="imHidden" href="https://www.softmaint.it/arca-evolution.html#imGoToCont" title="Salta il menu di navigazione">Vai ai contenuti</a>
+					<div id="imSideBar" bis_skin_checked="1">
+						<div id="imSideBarObjects" bis_skin_checked="1"></div>
+					</div>
+					<div id="imContentGraphics" bis_skin_checked="1"></div>
+					<main id="imContent">
+						<a id="imGoToCont"></a>
+						<div id="imPageRow_1" class="imPageRow" bis_skin_checked="1">
+						
+						</div>
+						<div id="imCell_1" class="" data-responsive-sequence-number="1" bis_skin_checked="1"> <div id="imCellStyleGraphics_1" bis_skin_checked="1"></div><div id="imCellStyleBorders_1" bis_skin_checked="1"></div><div id="imTextObject_8_01" bis_skin_checked="1">
+							<div data-index="0" class="text-tab-content grid-prop current-tab " id="imTextObject_8_01_tab0" style="opacity: 1; " bis_skin_checked="1">
+								<div class="text-inner" bis_skin_checked="1">
+									<div class="imTACenter" bis_skin_checked="1"><span class="fs20lh1-5 cf1 ff1">ARCA EVOLUTION</span></div>
+								</div>
+							</div>
+						
+						</div>
+						</div><div id="imPageRow_2" class="imPageRow" bis_skin_checked="1">
+						
+						</div>
+						<div id="imCell_3" class="" data-responsive-sequence-number="2" bis_skin_checked="1"> <div id="imCellStyleGraphics_3" bis_skin_checked="1"></div><div id="imCellStyleBorders_3" bis_skin_checked="1"></div><div id="imObjectImage_8_03" bis_skin_checked="1"><div id="imObjectImage_8_03_container" bis_skin_checked="1"><img src="./ARCA EVOLUTION - Softmaint _ Software House_files/AV_1.png" title="" alt="">
+						</div></div></div><div id="imCell_2" class="" data-responsive-sequence-number="3" bis_skin_checked="1"> <div id="imCellStyleGraphics_2" bis_skin_checked="1"></div><div id="imCellStyleBorders_2" bis_skin_checked="1"></div><div id="imTextObject_8_02" bis_skin_checked="1">
+							<div data-index="0" class="text-tab-content grid-prop current-tab " id="imTextObject_8_02_tab0" style="opacity: 1; " bis_skin_checked="1">
+								<div class="text-inner" bis_skin_checked="1">
+									<div class="imTACenter" bis_skin_checked="1"><strong><span class="fs12lh1-5 ff1">Incrementa la conoscenza</span></strong></div><div class="imTACenter" bis_skin_checked="1"><strong><span class="fs12lh1-5 ff1"><br></span></strong></div><div class="imTACenter" bis_skin_checked="1"><span class="fs12lh1-5 ff1">Arca EVOLUTION ti aiuta a crescere </span></div><div class="imTACenter" bis_skin_checked="1"><span class="fs12lh1-5 ff1"><br></span></div><div class="imTACenter" bis_skin_checked="1"><span class="fs12lh1-5 ff1">Ti aiuta ad avere la giusta &nbsp;consapevolezza dello stato di salute della tua azienda, grazie alla disponibilità di dati e report aggiornati in tempo reale e all’integrazione con le applicazioni di Microsoft Office Automation. Conserva la storia dei dati di clienti e fornitori così da non dovere gestire anagrafiche duplicate o multiple.</span></div>
+								</div>
+							</div>
+						
+						</div>
+						</div><div id="imCell_4" class="" data-responsive-sequence-number="4" bis_skin_checked="1"> <div id="imCellStyleGraphics_4" bis_skin_checked="1"></div><div id="imCellStyleBorders_4" bis_skin_checked="1"></div><div id="imObjectImage_8_04" bis_skin_checked="1"><div id="imObjectImage_8_04_container" bis_skin_checked="1"><img src="./ARCA EVOLUTION - Softmaint _ Software House_files/AV_2.jpg" title="" alt="">
+						</div></div></div><div id="imCell_5" class="" data-responsive-sequence-number="5" bis_skin_checked="1"> <div id="imCellStyleGraphics_5" bis_skin_checked="1"></div><div id="imCellStyleBorders_5" bis_skin_checked="1"></div><div id="imObjectImage_8_05" bis_skin_checked="1"><div id="imObjectImage_8_05_container" bis_skin_checked="1"><img src="./ARCA EVOLUTION - Softmaint _ Software House_files/AV_3.jpg" title="" alt="">
+						</div></div></div><div id="imCell_6" class="" data-responsive-sequence-number="6" bis_skin_checked="1"> <div id="imCellStyleGraphics_6" bis_skin_checked="1"></div><div id="imCellStyleBorders_6" bis_skin_checked="1"></div><div id="imTextObject_8_06" bis_skin_checked="1">
+							<div data-index="0" class="text-tab-content grid-prop current-tab " id="imTextObject_8_06_tab0" style="opacity: 1; " bis_skin_checked="1">
+								<div class="text-inner" bis_skin_checked="1">
+									<div class="imTACenter" bis_skin_checked="1"><strong><span class="fs12lh1-5 ff1">Semplice e intuitivo</span></strong></div><div class="imTACenter" bis_skin_checked="1"><strong><span class="fs12lh1-5 ff1"><br></span></strong></div><div class="imTACenter" bis_skin_checked="1"><span class="fs12lh1-5 ff1">Arca EVOLUTION ti fa risparmiare tempo</span></div><div class="imTACenter" bis_skin_checked="1"><span class="fs12lh1-5 ff1"><br></span></div><div class="imTACenter" bis_skin_checked="1"><span class="fs12lh1-5 ff1">Ha una grafica intuitiva, universalmente facile da apprendere anche da parte di utenti poco esperti o da poco in azienda. Offre una navigazione agile che permette il passaggio tra i dati del gestionale con pochissimi clic e da un'unica videata. Dall'anagrafica cliente è possibile ad esempio accedere a documenti, scadenze, insoluti.</span></div>
+								</div>
+							</div>
+						
+						</div>
+						</div><div id="imCell_7" class="" data-responsive-sequence-number="7" bis_skin_checked="1"> <div id="imCellStyleGraphics_7" bis_skin_checked="1"></div><div id="imCellStyleBorders_7" bis_skin_checked="1"></div><div id="imTextObject_8_07" bis_skin_checked="1">
+							<div data-index="0" class="text-tab-content grid-prop current-tab " id="imTextObject_8_07_tab0" style="opacity: 1; " bis_skin_checked="1">
+								<div class="text-inner" bis_skin_checked="1">
+									<div class="imTACenter" bis_skin_checked="1"><strong><span class="fs12lh1-5 ff1">Modulare e scalabile</span></strong></div><div class="imTACenter" bis_skin_checked="1"><strong><span class="fs12lh1-5 ff1"><br></span></strong></div><div class="imTACenter" bis_skin_checked="1"><span class="fs12lh1-5 ff1">Arca EVOLUTION cresce con te</span></div><div class="imTACenter" bis_skin_checked="1"><span class="fs12lh1-5 ff1"><br></span></div><div class="imTACenter" bis_skin_checked="1"><span class="fs12lh1-5 ff1">Un ERP completo e che permette di digitalizzare tutti i processi aziendali (contabili, commerciali, logistici, produttivi, documentali), rendendo efficace ed efficiente la tua azienda. E' allo stesso tempo un ERP modulare: permette l’aggiunta, nel tempo, di ulteriori moduli per supportare la crescita aziendale e rispondere così alle nuove esigenze funzionali.</span></div>
+								</div>
+							</div>
+						
+						</div>
+						</div><div id="imPageRow_3" class="imPageRow" bis_skin_checked="1">
+						
+						</div>
+						<div id="imCell_8" class="" data-responsive-sequence-number="8" bis_skin_checked="1"> <div id="imCellStyleGraphics_8" bis_skin_checked="1"></div><div id="imCellStyleBorders_8" bis_skin_checked="1"></div><div id="imObjectImage_8_08" bis_skin_checked="1"><div id="imObjectImage_8_08_container" bis_skin_checked="1"><img src="./ARCA EVOLUTION - Softmaint _ Software House_files/AV_4.jpg" title="" alt="">
+						</div></div></div><div id="imCell_9" class="" data-responsive-sequence-number="9" bis_skin_checked="1"> <div id="imCellStyleGraphics_9" bis_skin_checked="1"></div><div id="imCellStyleBorders_9" bis_skin_checked="1"></div><div id="imObjectImage_8_09" bis_skin_checked="1"><div id="imObjectImage_8_09_container" bis_skin_checked="1"><img src="./ARCA EVOLUTION - Softmaint _ Software House_files/AV_5.jpg" title="" alt="">
+						</div></div></div><div id="imCell_10" class="" data-responsive-sequence-number="10" bis_skin_checked="1"> <div id="imCellStyleGraphics_10" bis_skin_checked="1"></div><div id="imCellStyleBorders_10" bis_skin_checked="1"></div><div id="imObjectImage_8_10" bis_skin_checked="1"><div id="imObjectImage_8_10_container" bis_skin_checked="1"><img src="./ARCA EVOLUTION - Softmaint _ Software House_files/AV_6.jpg" title="" alt="">
+						</div></div></div><div id="imPageRow_4" class="imPageRow" bis_skin_checked="1">
+						
+						</div>
+						<div id="imCell_11" class="" data-responsive-sequence-number="11" bis_skin_checked="1"> <div id="imCellStyleGraphics_11" bis_skin_checked="1"></div><div id="imCellStyleBorders_11" bis_skin_checked="1"></div><div id="imTextObject_8_11" bis_skin_checked="1">
+							<div data-index="0" class="text-tab-content grid-prop current-tab " id="imTextObject_8_11_tab0" style="opacity: 1; " bis_skin_checked="1">
+								<div class="text-inner" bis_skin_checked="1">
+									<div class="imTACenter" bis_skin_checked="1"><strong><span class="fs12lh1-5 ff1">Flessibile e personalizzabile</span></strong></div><div class="imTACenter" bis_skin_checked="1"><strong><span class="fs12lh1-5 ff1"><br></span></strong></div><div class="imTACenter" bis_skin_checked="1"><span class="fs12lh1-5 ff1">Arca EVOLUTION si adatta a te</span></div><div class="imTACenter" bis_skin_checked="1"><span class="fs12lh1-5 ff1"><br></span></div><div class="imTACenter" bis_skin_checked="1"><span class="fs12lh1-5 ff1">E' un gestionale flessibile e può essere personalizzato sulla base dei tuoi processi aziendali e delle tue esigenze che possono anche cambiare nel tempo. Con Arca EVOLUTION non devi rivoluzione il tuo modo di lavorare, nè quello della tua azienda.</span></div>
+								</div>
+							</div>
+						
+						</div>
+						</div><div id="imCell_12" class="" data-responsive-sequence-number="12" bis_skin_checked="1"> <div id="imCellStyleGraphics_12" bis_skin_checked="1"></div><div id="imCellStyleBorders_12" bis_skin_checked="1"></div><div id="imTextObject_8_12" bis_skin_checked="1">
+							<div data-index="0" class="text-tab-content grid-prop current-tab " id="imTextObject_8_12_tab0" style="opacity: 1; " bis_skin_checked="1">
+								<div class="text-inner" bis_skin_checked="1">
+									<div class="imTACenter" bis_skin_checked="1"><strong><span class="fs12lh1-5 ff1">Sempre aggiornato con la normativa</span></strong></div><div class="imTACenter" bis_skin_checked="1"><strong><span class="fs12lh1-5 ff1"><br></span></strong></div><div class="imTACenter" bis_skin_checked="1"><span class="fs12lh1-5 ff1">Arca EVOLUTION ti fa evitare gli errori</span></div><div class="imTACenter" bis_skin_checked="1"><span class="fs12lh1-5 ff1"><br></span></div><div class="imTACenter" bis_skin_checked="1"><span class="fs12lh1-5 ff1">Puoi concentrarti sul tuo business e non preoccuparti delle novità normative: Arca EVOLUTION è sempre puntualmente aggiornato con i più recenti adeguamenti normativi contabili e fiscali.</span></div>
+								</div>
+							</div>
+						
+						</div>
+						</div><div id="imCell_13" class="" data-responsive-sequence-number="13" bis_skin_checked="1"> <div id="imCellStyleGraphics_13" bis_skin_checked="1"></div><div id="imCellStyleBorders_13" bis_skin_checked="1"></div><div id="imTextObject_8_13" bis_skin_checked="1">
+							<div data-index="0" class="text-tab-content grid-prop current-tab " id="imTextObject_8_13_tab0" style="opacity: 1; " bis_skin_checked="1">
+								<div class="text-inner" bis_skin_checked="1">
+									<div class="imTACenter" bis_skin_checked="1"><strong class="fs12lh1-5 ff1"><span class="cf1">Nuova Home Page ** &nbsp;</span></strong><strong class="fs12lh1-5 ff1"><span class="cf1">Novità! </span></strong></div><div class="imTACenter" bis_skin_checked="1"><strong class="fs12lh1-5 ff1"><br></strong></div><div class="imTACenter" bis_skin_checked="1"><span class="fs12lh1-5 ff1"><span class="cf1">Arca EVOLUTION ti semplifica la vita</span><br><br><span class="cf1">Con la nuova Home Page puoi effettuare una serie di attività e visualizzare i principali avvenimenti direttamente dalla pagina principale del tuo ERP, senza navigare tra le funzioni del gestionale.</span></span></div>
+								</div>
+							</div>
+						
+						</div>
+						</div><div id="imPageRow_5" class="imPageRow" bis_skin_checked="1">
+						
+						</div>
+						<div id="imCell_14" class="" data-responsive-sequence-number="14" bis_skin_checked="1"> <div id="imCellStyleGraphics_14" bis_skin_checked="1"></div><div id="imCellStyleBorders_14" bis_skin_checked="1"></div><div id="imObjectVideo_8_14" bis_skin_checked="1"><video id="imObjectVideo_8_14_media" src="videos/V1_ArcaEvolution.mp4" preload="metadata" controls="" controlslist="nodownload"></video>
+						</div><script>
+						
+							$(function () {
+						$('#imObjectVideo_8_14_media').attr('controlsList', 'nodownload').on('error', function () {
+						$(this).replaceWith('<div class="object-generic-error"><div class="text-center">' + x5engine.l10n.get('error_notsupported_video') + '</div></div>');});}); 
+						</script>
+						</div><div id="imCell_15" class="" data-responsive-sequence-number="15" bis_skin_checked="1"> <div id="imCellStyleGraphics_15" bis_skin_checked="1"></div><div id="imCellStyleBorders_15" bis_skin_checked="1"></div><div id="imTextObject_8_15" bis_skin_checked="1">
+							<div data-index="0" class="text-tab-content grid-prop current-tab " id="imTextObject_8_15_tab0" style="opacity: 1; " bis_skin_checked="1">
+								<div class="text-inner" bis_skin_checked="1">
+									<div class="imTARight" bis_skin_checked="1"><br></div><div class="imTACenter" bis_skin_checked="1"><a href="https://www.softmaint.it/files/Arca-Evolution.pdf" onclick="return x5engine.imShowBox({ media:[{type: &#39;iframe&#39;, url: &#39;files/Arca-Evolution.pdf&#39;, width: 1920, height: 1080, description: &#39;&#39;}]}, 0, this);" class="imCssLink inline-block"><img class="image-2" src="./ARCA EVOLUTION - Softmaint _ Software House_files/Base12_2.png" title="" alt=""></a><br></div><div class="imTACenter" bis_skin_checked="1"><br></div><div class="imTACenter" bis_skin_checked="1"><a href="https://www.softmaint.it/files/Arca-Evolution-NP21.pdf" onclick="return x5engine.imShowBox({ media:[{type: &#39;iframe&#39;, url: &#39;files/Arca-Evolution-NP21.pdf&#39;, width: 1920, height: 1080, description: &#39;&#39;}]}, 0, this);" class="imCssLink inline-block"><img class="image-3" src="./ARCA EVOLUTION - Softmaint _ Software House_files/Base13_2.png" title="" alt=""></a><br></div><div class="imTACenter" bis_skin_checked="1"><br></div><div class="imTACenter" bis_skin_checked="1"><a href="https://www.softmaint.it/arca-evolution-moduli.html" class="imCssLink inline-block" onclick="return x5engine.utils.location(&#39;arca-evolution-moduli.html&#39;, null, false)"><img class="image-0" src="./ARCA EVOLUTION - Softmaint _ Software House_files/Base20_2.png" title="" alt=""></a><br></div><div class="imTACenter" bis_skin_checked="1"><br></div><div class="imTACenter" bis_skin_checked="1"><a href="https://www.softmaint.it/arca-evolution-pers.html" class="imCssLink inline-block" onclick="return x5engine.utils.location(&#39;arca-evolution-pers.html&#39;, null, false)"><img class="image-1" src="./ARCA EVOLUTION - Softmaint _ Software House_files/Base21_2.png" title="" alt=""></a><br></div>
+								</div>
+							</div>
+						
+						</div>
+						</div><div id="imPageRow_6" class="imPageRow" bis_skin_checked="1">
+						
+						</div>
+						<div id="imCell_16" class="" data-responsive-sequence-number="16" bis_skin_checked="1"> <div id="imCellStyleGraphics_16" bis_skin_checked="1"></div><div id="imCellStyleBorders_16" bis_skin_checked="1"></div><div id="imTextObject_8_16" bis_skin_checked="1">
+							<div data-index="0" class="text-tab-content grid-prop current-tab " id="imTextObject_8_16_tab0" style="opacity: 1; " bis_skin_checked="1">
+								<div class="text-inner" bis_skin_checked="1">
+									<div class="imTACenter" bis_skin_checked="1"><br></div><div class="imTACenter" bis_skin_checked="1"><br></div><div class="imTACenter" bis_skin_checked="1"><br></div><div class="imTACenter" bis_skin_checked="1"><br></div><div class="imTACenter" bis_skin_checked="1"><br></div><div class="imTACenter" bis_skin_checked="1"><br></div><div class="imTACenter" bis_skin_checked="1"><br></div><div class="imTACenter" bis_skin_checked="1"><a href="https://www.softmaint.it/index.html" class="imCssLink inline-block" onclick="return x5engine.utils.location(&#39;index.html&#39;, null, false)"><img class="image-1" src="./ARCA EVOLUTION - Softmaint _ Software House_files/Base10_2.png" title="" alt=""></a><br></div><div class="imTACenter" bis_skin_checked="1"><br></div>
+								</div>
+							</div>
+						
+						</div>
+						</div><div id="imCell_17" class="" data-responsive-sequence-number="17" bis_skin_checked="1"> <div id="imCellStyleGraphics_17" bis_skin_checked="1"></div><div id="imCellStyleBorders_17" bis_skin_checked="1"></div><div id="imTextObject_8_17" bis_skin_checked="1">
+							<div data-index="0" class="text-tab-content grid-prop current-tab " id="imTextObject_8_17_tab0" style="opacity: 1; " bis_skin_checked="1">
+								<div class="text-inner" bis_skin_checked="1">
+									<div class="imTACenter" bis_skin_checked="1"><br></div><div class="imTACenter" bis_skin_checked="1"><br></div><div class="imTACenter" bis_skin_checked="1"><br></div><div class="imTACenter" bis_skin_checked="1"><br></div><div class="imTACenter" bis_skin_checked="1"><br></div><div class="imTACenter" bis_skin_checked="1"><br></div><div class="imTACenter" bis_skin_checked="1"><br></div><div class="imTACenter" bis_skin_checked="1"><a href="https://www.softmaint.it/contatti.html" class="imCssLink inline-block" onclick="return x5engine.utils.location(&#39;contatti.html&#39;, null, false)"><img class="image-1" src="./ARCA EVOLUTION - Softmaint _ Software House_files/Base9_2.png" title="" alt=""></a><br></div>
+								</div>
+							</div>
+						
+						</div>
+						</div>
+					</main>
+					<footer id="imFooter">
+						<div id="imFooterObjects" bis_skin_checked="1"><div id="imFooter_imTextObject_11_wrapper" class="template-object-wrapper" bis_skin_checked="1"><div id="imFooter_imTextObject_11" bis_skin_checked="1">
+	<div data-index="0" class="text-tab-content grid-prop current-tab " id="imFooter_imTextObject_11_tab0" style="opacity: 1; " bis_skin_checked="1">
+		<div class="text-inner" bis_skin_checked="1">
+			<div class="imTARight" bis_skin_checked="1"><span class="fs12lh1-5 cf1 ff1"><b>copyright 2020 - 2022 | softmaint.it</b></span></div>
+		</div>
+	</div>
+
+</div>
+</div><div id="imFooter_imObjectTitle_18_wrapper" class="template-object-wrapper" bis_skin_checked="1"><div id="imFooter_imObjectTitle_18" bis_skin_checked="1"><span id="imFooter_imObjectTitle_18_text">SOFTMAINT</span></div></div><div id="imFooter_imObjectTitle_19_wrapper" class="template-object-wrapper" bis_skin_checked="1"><div id="imFooter_imObjectTitle_19" bis_skin_checked="1"><span id="imFooter_imObjectTitle_19_text">SOFTWARE HOUSE</span></div></div><div id="imFooter_imTextObject_21_wrapper" class="template-object-wrapper" bis_skin_checked="1"><div id="imFooter_imTextObject_21" bis_skin_checked="1">
+	<div data-index="0" class="text-tab-content grid-prop current-tab " id="imFooter_imTextObject_21_tab0" style="opacity: 1; " bis_skin_checked="1">
+		<div class="text-inner" bis_skin_checked="1">
+			<div class="imTALeft" bis_skin_checked="1"><span class="fs10lh1-5 cf1 ff1">SOFTMAINT S.R.L.</span></div><div class="imTALeft" bis_skin_checked="1"><span class="cf1"><span class="fs10lh1-5 ff1">Via On. F</span><span class="fs10lh1-5 ff1">rancesco Napolitano, 185</span><br></span></div><div class="imTALeft" bis_skin_checked="1"><span class="fs10lh1-5 cf1 ff1">80035 - Nola Città Metropolitana di Napoli</span></div><div class="imTALeft" bis_skin_checked="1"><span class="fs10lh1-5 cf1 ff1">P. Iva : IT 07374571219</span><br></div>
+		</div>
+	</div>
+
+</div>
+</div><div id="imFooter_imTextObject_22_wrapper" class="template-object-wrapper" bis_skin_checked="1"><div id="imFooter_imTextObject_22" bis_skin_checked="1">
+	<div data-index="0" class="text-tab-content grid-prop current-tab " id="imFooter_imTextObject_22_tab0" style="opacity: 1; " bis_skin_checked="1">
+		<div class="text-inner" bis_skin_checked="1">
+			<div class="imTARight" bis_skin_checked="1"><span class="fs12lh1-5 cf1 ff1"><br></span></div><div class="imTARight" bis_skin_checked="1"><span class="fs12lh1-5 cf1 ff1">info@softmaint.it</span><br></div><div class="imTARight" bis_skin_checked="1"><span class="fs12lh1-5 cf1 ff1">+39 081 8232059</span></div><div class="imTARight" bis_skin_checked="1"><br></div>
+		</div>
+	</div>
+
+</div>
+</div><div id="imFooter_imObjectImage_23_wrapper" class="template-object-wrapper" bis_skin_checked="1"><div id="imFooter_imObjectImage_23" bis_skin_checked="1"><div id="imFooter_imObjectImage_23_container" bis_skin_checked="1"><img src="./ARCA EVOLUTION - Softmaint _ Software House_files/SM_Logo2_gb163ln7.png" title="" alt="">
+</div></div></div><div id="imFooter_imHTMLObject_24_wrapper" class="template-object-wrapper" bis_skin_checked="1"><div id="imFooter_imHTMLObject_24" class="imHTMLObject" style="text-align: center; width: 100%; overflow: hidden;" bis_skin_checked="1"><!-- Date and Time.Date Time: START -->
+<span style="font-weight: normal; font-style: normal; font-family:Tahoma; font-size:11pt; color: #FFFFFF"><span class="imNow">Gio 22 Set 2022</span></span>
+<!-- Date and Time.Date Time: END --></div></div></div>
+					</footer>
+				</div>
+				<span class="imHidden"><a href="https://www.softmaint.it/arca-evolution.html#imGoToCont" title="Rileggi i contenuti della pagina">Torna ai contenuti</a></span>
+			</div>
+		</div>
+		
+		<noscript class="imNoScript"><div class="alert alert-red">Per poter utilizzare questo sito è necessario attivare JavaScript.</div></noscript>
+	
+
+<script src="./ARCA EVOLUTION - Softmaint _ Software House_files/x5engine.deferrable.js.download"></script><script src="./ARCA EVOLUTION - Softmaint _ Software House_files/x5cartengine.js.download"></script><script src="./ARCA EVOLUTION - Softmaint _ Software House_files/x5settings.js.download"></script><div id="media-query-to-js" bis_skin_checked="1" style=""></div><div id="imPageToTop" bis_skin_checked="1" class="" style="display: none;"><img src="./ARCA EVOLUTION - Softmaint _ Software House_files/page-to-top.png" alt="scroll to top" id="imPageToTop_img"></div></body></html>
